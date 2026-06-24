@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>World Café — Live Q&A Board</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#080c18;--surface:#0f1624;--surface2:#161f33;--surface3:#1c2740;--border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.12);--border3:rgba(255,255,255,0.2);--text:#e8f0ff;--text2:#7a90b8;--text3:#3a4a6a;--accent:#3b82f6;--accent2:#6366f1;--green:#10b981;--red:#f43f5e;--amber:#f59e0b}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(59,130,246,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,0.025) 1px,transparent 1px);background-size:48px 48px;pointer-events:none;z-index:0}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:var(--surface)}
+::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:4px}
+
+/* HEADER */
+.header{position:sticky;top:0;z-index:100;background:rgba(8,12,24,0.92);border-bottom:1px solid var(--border2);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;backdrop-filter:blur(16px)}
+.header-left{display:flex;align-items:center;gap:12px}
+.logo{width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,#3b82f6,#6366f1);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;color:#fff;flex-shrink:0;box-shadow:0 0 18px rgba(99,102,241,0.5)}
+.header-title{font-size:14px;font-weight:600;color:var(--text)}
+.header-sub{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;letter-spacing:.08em;margin-top:1px}
+.header-right{display:flex;align-items:center;gap:10px}
+.live-pill{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:700;color:var(--green);padding:4px 11px;border-radius:999px;border:1px solid rgba(16,185,129,0.25);background:rgba(16,185,129,0.08);letter-spacing:.08em;text-transform:uppercase}
+.pulse{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 1.6s infinite;box-shadow:0 0 6px var(--green)}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.6)}}
+.round-pill{font-size:10px;font-weight:600;color:var(--amber);padding:4px 11px;border-radius:999px;border:1px solid rgba(245,158,11,0.25);background:rgba(245,158,11,0.08);font-family:'JetBrains Mono',monospace}
+
+/* TABS */
+.tabs{position:sticky;top:58px;z-index:90;display:flex;padding:0 24px;background:rgba(8,12,24,0.88);border-bottom:1px solid var(--border);backdrop-filter:blur(12px)}
+.tab{padding:11px 18px;font-size:12px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .2s,border-color .2s;display:flex;align-items:center;gap:6px;letter-spacing:.02em;font-family:'Inter',sans-serif}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* VIEWS */
+.view{display:none;padding:24px;max-width:1040px;margin:0 auto;position:relative;z-index:5}
+.view.active{display:block}
+
+/* SECTION HEADING */
+.sh{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;font-family:'JetBrains Mono',monospace}
+
+/* TEAM GRID */
+.color-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:8px;margin-bottom:24px}
+.color-btn{padding:11px 14px;border-radius:10px;border:1px solid;cursor:pointer;font-size:12px;font-weight:600;transition:transform .15s,box-shadow .15s,border-color .15s;text-align:center;display:flex;align-items:center;justify-content:center;gap:7px;letter-spacing:.02em;font-family:'Inter',sans-serif}
+.color-btn:hover{transform:translateY(-2px)}
+.color-btn.selected{transform:translateY(-2px);box-shadow:0 0 0 2px var(--accent),0 8px 28px rgba(0,0,0,0.5)}
+.cdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* TEAM INDICATOR */
+.team-ind{display:inline-flex;align-items:center;gap:9px;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:600;margin-bottom:18px;border:1px solid}
+.tind-dot{width:9px;height:9px;border-radius:50%}
+
+/* QUESTION CARDS */
+.q-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:10px;transition:border-color .2s}
+.q-card:focus-within{border-color:rgba(59,130,246,0.4)}
+.q-meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.q-badge{font-size:9px;font-weight:700;color:var(--accent);background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.2);padding:3px 8px;border-radius:999px;letter-spacing:.08em;text-transform:uppercase;font-family:'JetBrains Mono',monospace}
+.q-wc{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+.q-text{font-size:14px;font-weight:500;margin-bottom:10px;line-height:1.6;color:var(--text)}
+textarea{width:100%;padding:10px 13px;border-radius:8px;border:1px solid var(--border2);font-size:13px;line-height:1.6;resize:vertical;min-height:80px;font-family:'Inter',sans-serif;background:var(--surface2);color:var(--text);transition:border-color .2s,box-shadow .2s}
+textarea::placeholder{color:var(--text3)}
+textarea:focus{outline:none;border-color:rgba(59,130,246,0.5);box-shadow:0 0 0 3px rgba(59,130,246,0.08)}
+
+/* DRAFT NOTICE */
+.draft-notice{font-size:10px;color:var(--green);font-family:'JetBrains Mono',monospace;margin-top:4px;min-height:16px;transition:opacity .3s}
+
+/* SUBMIT */
+.submit-btn{width:100%;padding:12px;border-radius:10px;border:none;background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .2s,transform .15s;letter-spacing:.01em;font-family:'Inter',sans-serif;margin-top:6px}
+.submit-btn:hover{opacity:.88;transform:translateY(-1px)}
+.submit-btn:disabled{opacity:.35;cursor:not-allowed;transform:none}
+.status-msg{text-align:center;font-size:11px;padding:7px 0;min-height:26px;font-family:'JetBrains Mono',monospace;transition:color .2s}
+.ok{color:var(--green)}.err{color:var(--red)}
+
+/* CONFIRM OVERLAY */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px)}
+.overlay.hidden{display:none}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:24px;max-width:540px;width:90%;max-height:80vh;overflow-y:auto}
+.modal-title{font-size:15px;font-weight:600;margin-bottom:4px}
+.modal-sub{font-size:12px;color:var(--text2);margin-bottom:18px}
+.modal-q{margin-bottom:14px;padding:12px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)}
+.modal-qnum{font-size:10px;font-weight:700;color:var(--accent);font-family:'JetBrains Mono',monospace;margin-bottom:4px}
+.modal-qt{font-size:12px;color:var(--text2);margin-bottom:6px;line-height:1.5}
+.modal-ans{font-size:13px;color:var(--text);line-height:1.5}
+.modal-btns{display:flex;gap:8px;margin-top:18px}
+.btn-confirm{flex:1;padding:10px;border-radius:8px;border:none;background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif}
+.btn-back{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;font-family:'Inter',sans-serif}
+.btn-back:hover{background:var(--surface2)}
+
+/* MAIN SCREEN TOOLBAR */
+.main-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+.toolbar-left{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.resp-count{font-size:11px;color:var(--text2);font-family:'JetBrains Mono',monospace}
+.icon-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;font-size:11px;font-weight:500;border-radius:7px;border:1px solid var(--border2);background:var(--surface);cursor:pointer;color:var(--text2);transition:background .15s,color .15s;font-family:'Inter',sans-serif}
+.icon-btn:hover{background:var(--surface2);color:var(--text)}
+.icon-btn.danger{color:var(--red);border-color:rgba(244,63,94,0.2)}
+.icon-btn.danger:hover{background:rgba(244,63,94,0.07)}
+.icon-btn.primary{color:var(--accent);border-color:rgba(59,130,246,0.3);background:rgba(59,130,246,0.07)}
+.icon-btn.primary:hover{background:rgba(59,130,246,0.14)}
+
+/* LEGEND */
+.legend{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px}
+.lchip{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;padding:3px 10px;border-radius:999px;border:1px solid;transition:opacity .25s;letter-spacing:.03em;font-family:'JetBrains Mono',monospace}
+.lchip.inactive{opacity:.22}
+.ldot{width:6px;height:6px;border-radius:50%}
+
+/* MAIN Q SECTIONS */
+.q-section{background:var(--surface);border:1px solid var(--border);border-radius:13px;margin-bottom:14px;overflow:hidden}
+.q-section-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:12px}
+.qn-badge{font-size:9px;font-weight:700;color:var(--accent);background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.2);padding:3px 8px;border-radius:999px;white-space:nowrap;font-family:'JetBrains Mono',monospace;margin-top:2px;flex-shrink:0}
+.q-section-text{font-size:13px;font-weight:500;color:var(--text);line-height:1.5}
+.answers-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+.answer-card{padding:13px 15px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);border-left:3px solid;animation:fadeUp .3s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.atag{font-size:9px;font-weight:700;margin-bottom:5px;text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;gap:5px;font-family:'JetBrains Mono',monospace}
+.atag-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.atext{font-size:12px;line-height:1.6;color:var(--text)}
+.no-ans{padding:16px 18px;font-size:12px;color:var(--text3);font-style:italic}
+.empty-state{text-align:center;padding:56px 24px;color:var(--text3);font-size:13px}
+
+/* AI SYNTHESIS */
+.ai-box{background:var(--surface);border:1px solid rgba(99,102,241,0.3);border-radius:13px;padding:18px 20px;margin-top:18px}
+.ai-header{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.ai-badge{font-size:9px;font-weight:700;color:#a5b4fc;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.25);padding:3px 9px;border-radius:999px;font-family:'JetBrains Mono',monospace;letter-spacing:.07em}
+.ai-title{font-size:13px;font-weight:600;color:var(--text)}
+.ai-content{font-size:13px;color:var(--text2);line-height:1.7;white-space:pre-wrap}
+.ai-loading{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+.ai-spinner{width:14px;height:14px;border:2px solid var(--border2);border-top-color:#6366f1;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* TIMER */
+.timer-bar{background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:14px}
+.timer-display{font-size:22px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--text);min-width:72px}
+.timer-display.warn{color:var(--amber)}
+.timer-display.urgent{color:var(--red);animation:blink .8s infinite}
+@keyframes blink{50%{opacity:.4}}
+.timer-btn{padding:6px 12px;border-radius:7px;border:1px solid var(--border2);background:var(--surface2);cursor:pointer;font-size:11px;font-weight:500;color:var(--text2);font-family:'Inter',sans-serif}
+.timer-btn:hover{background:var(--surface3);color:var(--text)}
+.timer-progress{flex:1;height:5px;background:var(--surface2);border-radius:999px;overflow:hidden}
+.timer-fill{height:100%;background:linear-gradient(90deg,#3b82f6,#6366f1);border-radius:999px;transition:width .5s linear}
+.timer-fill.warn{background:linear-gradient(90deg,var(--amber),#f97316)}
+.timer-fill.urgent{background:var(--red)}
+
+/* PRESENTER MODE */
+.presenter-wrap{position:fixed;inset:0;z-index:300;background:var(--bg);display:flex;flex-direction:column;overflow:hidden}
+.presenter-wrap.hidden{display:none}
+.pres-header{padding:16px 28px;border-bottom:1px solid var(--border2);display:flex;align-items:center;justify-content:space-between;background:var(--surface)}
+.pres-qnum{font-size:11px;font-weight:700;color:var(--accent);font-family:'JetBrains Mono',monospace;letter-spacing:.08em}
+.pres-progress{display:flex;gap:5px;margin:0 auto}
+.pres-dot{width:28px;height:4px;border-radius:999px;background:var(--surface3);transition:background .3s}
+.pres-dot.active{background:var(--accent)}
+.pres-dot.done{background:var(--surface3);opacity:.5}
+.pres-body{flex:1;padding:32px 48px;overflow-y:auto;display:flex;flex-direction:column}
+.pres-q{font-size:22px;font-weight:600;color:var(--text);line-height:1.5;margin-bottom:28px}
+.pres-answers{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;flex:1}
+.pres-card{padding:16px 18px;border-radius:12px;border-left:4px solid;animation:fadeUp .35s ease}
+.pres-atag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px;display:flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace}
+.pres-atext{font-size:14px;line-height:1.65;color:var(--text)}
+.pres-footer{padding:16px 28px;border-top:1px solid var(--border2);display:flex;align-items:center;justify-content:space-between;background:var(--surface)}
+.pres-nav{display:flex;gap:8px}
+.pres-btn{padding:9px 20px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:13px;font-weight:500;cursor:pointer;font-family:'Inter',sans-serif;transition:background .15s}
+.pres-btn:hover{background:var(--surface3)}
+.pres-btn.next{background:linear-gradient(135deg,#3b82f6,#6366f1);border:none;color:#fff}
+.pres-btn.next:hover{opacity:.88}
+.pres-btn:disabled{opacity:.3;cursor:not-allowed}
+
+/* QR */
+.qr-wrap{text-align:center;padding:16px}
+#qr-canvas{display:inline-block;padding:12px;background:#fff;border-radius:10px}
+.qr-url{font-size:11px;color:var(--text2);margin-top:8px;font-family:'JetBrains Mono',monospace;word-break:break-all}
+
+/* FACILITATOR MODAL */
+.fac-label{font-size:11px;color:var(--text2);margin-bottom:5px;display:block}
+.fac-input{width:100%;padding:9px 12px;border-radius:7px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:13px;font-family:'Inter',sans-serif;margin-bottom:12px}
+.fac-input:focus{outline:none;border-color:rgba(59,130,246,0.5)}
+.fac-row{display:flex;gap:8px;margin-bottom:8px}
+.fac-btn{flex:1;padding:9px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);font-size:12px;font-weight:500;cursor:pointer;font-family:'Inter',sans-serif;transition:background .15s}
+.fac-btn:hover{background:var(--surface3);color:var(--text)}
+.fac-btn.red{color:var(--red);border-color:rgba(244,63,94,0.2)}
+.fac-btn.red:hover{background:rgba(244,63,94,0.08)}
+
+/* WORD CLOUD */
+.wc-section{margin-top:18px}
+.wc-title{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;font-family:'JetBrains Mono',monospace}
+.wc-cloud{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.wc-word{border-radius:999px;padding:4px 12px;border:1px solid;font-weight:600;cursor:default;transition:transform .15s}
+.wc-word:hover{transform:scale(1.08)}
+
+/* ROUND SELECTOR */
+.round-bar{display:flex;align-items:center;gap:10px;margin-bottom:18px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px}
+.round-label{font-size:11px;color:var(--text2);font-family:'JetBrains Mono',monospace}
+.round-btns{display:flex;gap:6px}
+.round-btn{padding:5px 14px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:11px;font-weight:600;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:all .15s}
+.round-btn.active{background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.35);color:var(--accent)}
+
+.fs-hint{font-size:10px;color:var(--text3);text-align:right;margin-bottom:8px;font-family:'JetBrains Mono',monospace}
+.divider{border:none;border-top:1px solid var(--border);margin:10px 0}
+</style>
+</head>
+<body>
+
+<!-- CONFIRMATION OVERLAY -->
+<div class="overlay hidden" id="confirm-overlay">
+  <div class="modal">
+    <div class="modal-title">Review your answers</div>
+    <div class="modal-sub" id="confirm-team-label"></div>
+    <div id="confirm-answers"></div>
+    <div class="modal-btns">
+      <button class="btn-back" onclick="closeConfirm()">← Go back</button>
+      <button class="btn-confirm" onclick="doSubmit()">Confirm & submit</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRESENTER MODE -->
+<div class="presenter-wrap hidden" id="presenter">
+  <div class="pres-header">
+    <span class="pres-qnum" id="pres-qnum"></span>
+    <div class="pres-progress" id="pres-dots"></div>
+    <button class="pres-btn" onclick="closePresenter()" style="padding:6px 14px;font-size:12px">✕ Exit</button>
+  </div>
+  <div class="pres-body">
+    <div class="pres-q" id="pres-q"></div>
+    <div class="pres-answers" id="pres-answers"></div>
+  </div>
+  <div class="pres-footer">
+    <div class="pres-nav">
+      <button class="pres-btn" id="pres-prev" onclick="presNav(-1)">← Previous</button>
+      <button class="pres-btn next" id="pres-next" onclick="presNav(1)">Next →</button>
+    </div>
+    <span style="font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace" id="pres-count"></span>
+  </div>
+</div>
+
+<!-- FACILITATOR MODAL -->
+<div class="overlay hidden" id="fac-overlay">
+  <div class="modal">
+    <div class="modal-title">Facilitator controls</div>
+    <div class="modal-sub" id="fac-status"></div>
+    <div id="fac-auth">
+      <label class="fac-label">Facilitator password</label>
+      <input class="fac-input" type="password" id="fac-pw" placeholder="Enter password…">
+      <div class="modal-btns">
+        <button class="btn-back" onclick="closeFac()">Cancel</button>
+        <button class="btn-confirm" onclick="authFac()">Unlock</button>
+      </div>
+    </div>
+    <div id="fac-panel" style="display:none">
+      <div class="fac-row">
+        <button class="fac-btn" onclick="facSetRound(1)">Round 1</button>
+        <button class="fac-btn" onclick="facSetRound(2)">Round 2</button>
+        <button class="fac-btn" onclick="facSetRound(3)">Round 3</button>
+      </div>
+      <div class="fac-row">
+        <button class="fac-btn" onclick="facExportExcel()">Export Excel</button>
+        <button class="fac-btn red" onclick="facClear()">Clear all answers</button>
+      </div>
+      <div class="modal-btns" style="margin-top:12px">
+        <button class="btn-back" onclick="closeFac()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <div class="logo">W</div>
+    <div>
+      <div class="header-title">World Café — Live Q&amp;A Board</div>
+      <div class="header-sub">REAL-TIME COLLABORATIVE RESPONSE SYSTEM</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="round-pill" id="header-round">ROUND 1</span>
+    <span class="live-pill"><span class="pulse"></span>Live</span>
+    <button class="icon-btn" onclick="openFac()" title="Facilitator controls">⚙ Facilitator</button>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('team')">⬡ Team panel</button>
+  <button class="tab" onclick="switchTab('main')">◈ Main screen</button>
+  <button class="tab" onclick="switchTab('qr')">⊡ QR / Share</button>
+</div>
+
+<!-- TEAM PANEL -->
+<div class="view active" id="view-team">
+  <div id="team-picker">
+    <p class="sh">Select your team</p>
+    <div class="color-grid" id="color-btns"></div>
+  </div>
+  <div id="q-form" style="display:none">
+    <div id="team-indicator-wrap"></div>
+    <p class="sh">Your responses — <span id="round-label-team">Round 1</span></p>
+    <div id="questions-container"></div>
+    <div class="draft-notice" id="draft-notice"></div>
+    <button class="submit-btn" id="submit-btn" onclick="showConfirm()">Review &amp; submit</button>
+    <div class="status-msg" id="submit-status"></div>
+  </div>
+</div>
+
+<!-- MAIN SCREEN -->
+<div class="view" id="view-main">
+  <div class="timer-bar" id="timer-bar">
+    <div>
+      <div style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;letter-spacing:.08em;margin-bottom:3px">ROUND TIMER</div>
+      <div class="timer-display" id="timer-display">10:00</div>
+    </div>
+    <div class="timer-progress"><div class="timer-fill" id="timer-fill" style="width:100%"></div></div>
+    <div style="display:flex;flex-direction:column;gap:5px">
+      <div style="display:flex;gap:5px">
+        <button class="timer-btn" onclick="setTimer(5)">5m</button>
+        <button class="timer-btn" onclick="setTimer(10)">10m</button>
+        <button class="timer-btn" onclick="setTimer(15)">15m</button>
+        <button class="timer-btn" onclick="setTimer(20)">20m</button>
+      </div>
+      <div style="display:flex;gap:5px">
+        <button class="timer-btn" id="timer-toggle" onclick="toggleTimer()">▶ Start</button>
+        <button class="timer-btn" onclick="resetTimer()">↺ Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-toolbar">
+    <div class="toolbar-left">
+      <span class="live-pill"><span class="pulse"></span>Live</span>
+      <span class="resp-count" id="response-count"></span>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="icon-btn primary" onclick="openPresenter()">⊞ Presenter mode</button>
+      <button class="icon-btn primary" onclick="generateAI()">✦ AI synthesis</button>
+      <button class="icon-btn" onclick="exportExcel()">↓ Export</button>
+      <button class="icon-btn danger" onclick="openFac()">⚙</button>
+    </div>
+  </div>
+
+  <div class="fs-hint">F11 → fullscreen on projector</div>
+  <div class="legend" id="team-legend"></div>
+  <div id="main-content"></div>
+  <div id="ai-section"></div>
+</div>
+
+<!-- QR / SHARE TAB -->
+<div class="view" id="view-qr">
+  <p class="sh">Share with teams</p>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:24px;max-width:440px">
+    <div class="qr-wrap">
+      <div id="qr-canvas"></div>
+      <div class="qr-url" id="qr-url-text"></div>
+    </div>
+    <p style="font-size:12px;color:var(--text2);text-align:center;margin-top:14px;line-height:1.7">Teams scan this QR code or open the URL on their laptop. They will land directly on the Team panel.</p>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, get, remove, onValue, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBeIdeInKP-iZcivr7RxeiWSQ-jdz8lOfU",
+  authDomain: "public-financial-management.firebaseapp.com",
+  databaseURL: "https://public-financial-management-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "public-financial-management",
+  storageBucket: "public-financial-management.firebasestorage.app",
+  messagingSenderId: "127654548513",
+  appId: "1:127654548513:web:0211e20e9dd5c903163f60",
+  measurementId: "G-JEWFF39RDD"
+};
+
+// ── EDIT YOUR QUESTIONS PER ROUND ─────────────────────────────────────────
+const ALL_ROUNDS = {
+  1: [
+    { id:'q1', text:'What are the biggest bottlenecks you see in our current process, and what would you prioritize fixing first?' },
+    { id:'q2', text:'What data or evidence would help us make a stronger case for the changes you are proposing?' },
+    { id:'q3', text:'What risks or unintended consequences should we watch out for?' },
+    { id:'q4', text:'If you had full authority and resources, what one thing would you do differently starting next week?' },
+  ],
+  2: [
+    { id:'q1', text:'How does your team define success for this initiative 12 months from now?' },
+    { id:'q2', text:'Which stakeholders are most critical to engage early, and why?' },
+    { id:'q3', text:'What existing strengths can we leverage to accelerate progress?' },
+    { id:'q4', text:'What is the single biggest assumption we are making that we should test first?' },
+  ],
+  3: [
+    { id:'q1', text:'What have you heard from other tables that resonates most with your team?' },
+    { id:'q2', text:'What surprising insights have emerged from today\'s discussion?' },
+    { id:'q3', text:'What is the most urgent action item that came out of this session?' },
+    { id:'q4', text:'What commitment is your team prepared to make before the next meeting?' },
+  ],
+};
+// ─────────────────────────────────────────────────────────────────────────
+
+const FAC_PASSWORD = "dap2025"; // ← Change this to your facilitator password
+
+const TEAMS = [
+  { id:'blue',    label:'Team Blue',    bg:'rgba(59,130,246,0.1)',   border:'rgba(59,130,246,0.35)',   text:'#93c5fd', dot:'#3b82f6' },
+  { id:'violet',  label:'Team Violet',  bg:'rgba(139,92,246,0.1)',   border:'rgba(139,92,246,0.35)',   text:'#c4b5fd', dot:'#8b5cf6' },
+  { id:'emerald', label:'Team Emerald', bg:'rgba(16,185,129,0.1)',   border:'rgba(16,185,129,0.35)',   text:'#6ee7b7', dot:'#10b981' },
+  { id:'amber',   label:'Team Amber',   bg:'rgba(245,158,11,0.1)',   border:'rgba(245,158,11,0.35)',   text:'#fcd34d', dot:'#f59e0b' },
+  { id:'rose',    label:'Team Rose',    bg:'rgba(244,63,94,0.1)',    border:'rgba(244,63,94,0.35)',    text:'#fda4af', dot:'#f43f5e' },
+  { id:'cyan',    label:'Team Cyan',    bg:'rgba(6,182,212,0.1)',    border:'rgba(6,182,212,0.35)',    text:'#67e8f9', dot:'#06b6d4' },
+];
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+let currentRound = 1;
+let QUESTIONS = ALL_ROUNDS[1];
+let selectedTeam = null;
+let pendingAnswers = {};
+let allAnswersData = {};
+let facAuthed = false;
+let presIdx = 0;
+
+// Timer state
+let timerTotal = 600, timerLeft = 600, timerRunning = false, timerInterval = null;
+
+// ── FIREBASE REFS ──────────────────────────────────────────────────────────
+const answersRef = () => ref(db, `worldcafe/round${currentRound}/answers`);
+const metaRef = ref(db, 'worldcafe/meta');
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+onValue(metaRef, snap => {
+  const meta = snap.val();
+  if (meta?.round && meta.round !== currentRound) {
+    currentRound = meta.round;
+    QUESTIONS = ALL_ROUNDS[currentRound] || ALL_ROUNDS[1];
+    document.getElementById('header-round').textContent = `ROUND ${currentRound}`;
+    document.getElementById('round-label-team').textContent = `Round ${currentRound}`;
+    if (selectedTeam) buildQForm();
+  }
+});
+
+onValue(ref(db, `worldcafe/round${currentRound}/answers`), snap => {
+  allAnswersData = snap.val() || {};
+  if (document.getElementById('view-main').classList.contains('active')) renderMain();
+  if (document.getElementById('presenter') && !document.getElementById('presenter').classList.contains('hidden')) renderPresSlide();
+});
+
+// ── TEAM BUTTONS ───────────────────────────────────────────────────────────
+const colorGrid = document.getElementById('color-btns');
+TEAMS.forEach(t => {
+  const btn = document.createElement('button');
+  btn.className = 'color-btn'; btn.id = 'cbtn-' + t.id;
+  btn.style.cssText = `background:${t.bg};border-color:${t.border};color:${t.text}`;
+  btn.innerHTML = `<span class="cdot" style="background:${t.dot};box-shadow:0 0 6px ${t.dot}"></span>${t.label}`;
+  btn.onclick = () => selectTeam(t);
+  colorGrid.appendChild(btn);
+});
+
+function selectTeam(team) {
+  selectedTeam = team;
+  document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('cbtn-' + team.id).classList.add('selected');
+  document.getElementById('q-form').style.display = 'block';
+  document.getElementById('team-indicator-wrap').innerHTML =
+    `<div class="team-ind" style="background:${team.bg};border-color:${team.border};color:${team.text}">
+      <span class="tind-dot" style="background:${team.dot};box-shadow:0 0 8px ${team.dot}"></span>${team.label}
+     </div>`;
+  loadDraft();
+  buildQForm();
+}
+
+function buildQForm() {
+  QUESTIONS = ALL_ROUNDS[currentRound] || ALL_ROUNDS[1];
+  const c = document.getElementById('questions-container');
+  c.innerHTML = QUESTIONS.map((q, i) =>
+    `<div class="q-card">
+      <div class="q-meta">
+        <span class="q-badge">Q${i+1} / ${QUESTIONS.length}</span>
+        <span class="q-wc" id="wc-${q.id}">0 words</span>
+      </div>
+      <div class="q-text">${q.text}</div>
+      <textarea id="ans-${q.id}" placeholder="Type your team's answer here…" rows="3" oninput="onType('${q.id}')">${pendingAnswers[q.id]||''}</textarea>
+    </div>`
+  ).join('');
+}
+
+window.onType = function(qid) {
+  const v = document.getElementById('ans-' + qid)?.value || '';
+  const wc = v.trim() ? v.trim().split(/\s+/).length : 0;
+  document.getElementById('wc-' + qid).textContent = wc + ' word' + (wc===1?'':'s');
+  saveDraft();
+};
+
+function saveDraft() {
+  if (!selectedTeam) return;
+  const d = {};
+  QUESTIONS.forEach(q => { d[q.id] = document.getElementById('ans-'+q.id)?.value||''; });
+  try { localStorage.setItem(`wc_draft_${selectedTeam.id}_r${currentRound}`, JSON.stringify(d)); } catch(e){}
+  const dn = document.getElementById('draft-notice');
+  dn.textContent = '✓ Draft auto-saved';
+  setTimeout(() => { dn.textContent = ''; }, 1500);
+}
+
+function loadDraft() {
+  if (!selectedTeam) return;
+  try {
+    const raw = localStorage.getItem(`wc_draft_${selectedTeam.id}_r${currentRound}`);
+    pendingAnswers = raw ? JSON.parse(raw) : {};
+  } catch(e) { pendingAnswers = {}; }
+}
+
+// ── CONFIRM + SUBMIT ───────────────────────────────────────────────────────
+window.showConfirm = function() {
+  const answers = {};
+  QUESTIONS.forEach(q => {
+    answers[q.id] = document.getElementById('ans-'+q.id)?.value?.trim() || '';
+  });
+  pendingAnswers = answers;
+  document.getElementById('confirm-team-label').textContent = selectedTeam?.label + ' — Round ' + currentRound;
+  document.getElementById('confirm-answers').innerHTML = QUESTIONS.map((q,i) =>
+    `<div class="modal-q">
+      <div class="modal-qnum">Q${i+1}</div>
+      <div class="modal-qt">${q.text}</div>
+      <div class="modal-ans">${answers[q.id] || '<em style="color:var(--text3)">No answer</em>'}</div>
+    </div>`
+  ).join('');
+  document.getElementById('confirm-overlay').classList.remove('hidden');
+};
+window.closeConfirm = () => document.getElementById('confirm-overlay').classList.add('hidden');
+
+window.doSubmit = async function() {
+  closeConfirm();
+  const btn = document.getElementById('submit-btn');
+  const status = document.getElementById('submit-status');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    await set(ref(db, `worldcafe/round${currentRound}/answers/${selectedTeam.id}`), {
+      team: selectedTeam, answers: pendingAnswers, ts: Date.now()
+    });
+    status.className = 'status-msg ok';
+    status.textContent = '✓ Submitted — you can update and resubmit anytime';
+    try { localStorage.removeItem(`wc_draft_${selectedTeam.id}_r${currentRound}`); } catch(e){}
+    setTimeout(() => { status.textContent=''; status.className='status-msg'; }, 5000);
+  } catch(e) {
+    status.className = 'status-msg err';
+    status.textContent = '⚠ ' + e.message;
+  }
+  btn.disabled = false; btn.textContent = 'Review & submit';
+};
+
+// ── TAB SWITCHING ──────────────────────────────────────────────────────────
+window.switchTab = function(tab) {
+  document.querySelectorAll('.tab').forEach((t,i) =>
+    t.classList.toggle('active', ['team','main','qr'][i]===tab)
+  );
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-'+tab).classList.add('active');
+  if (tab==='qr') buildQR();
+  if (tab==='main') renderMain();
+};
+
+// ── RENDER MAIN ────────────────────────────────────────────────────────────
+function renderMain() {
+  const data = allAnswersData;
+  const responded = Object.keys(data).length;
+  document.getElementById('response-count').textContent = `${responded} / ${TEAMS.length} teams responded`;
+  document.getElementById('team-legend').innerHTML = TEAMS.map(t => {
+    const has = data[t.id];
+    return `<span class="lchip ${has?'':'inactive'}" style="background:${has?t.bg:'transparent'};border-color:${t.border};color:${t.text}">
+      <span class="ldot" style="background:${t.dot}${has?';box-shadow:0 0 5px '+t.dot:''}"></span>${t.label}${has?' ✓':''}
+    </span>`;
+  }).join('');
+  if (responded===0) {
+    document.getElementById('main-content').innerHTML='<div class="empty-state">Waiting for teams to submit their answers…</div>';
+    return;
+  }
+  document.getElementById('main-content').innerHTML = QUESTIONS.map((q,i) => {
+    const cards = TEAMS.map(t => {
+      const ans = data[t.id]?.answers?.[q.id];
+      if (!ans) return '';
+      return `<div class="answer-card" style="background:${t.bg};border-left-color:${t.dot}">
+        <div class="atag" style="color:${t.text}"><span class="atag-dot" style="background:${t.dot};box-shadow:0 0 5px ${t.dot}"></span>${t.label}</div>
+        <div class="atext">${ans}</div>
+      </div>`;
+    }).join('');
+    return `<div class="q-section">
+      <div class="q-section-header"><span class="qn-badge">Q${i+1}</span><div class="q-section-text">${q.text}</div></div>
+      <div class="answers-grid">${cards||'<div class="no-ans">No answers yet.</div>'}</div>
+      ${buildWordCloud(data, q.id)}
+    </div>`;
+  }).join('');
+}
+
+// ── WORD CLOUD ─────────────────────────────────────────────────────────────
+function buildWordCloud(data, qid) {
+  const stop = new Set(['the','a','an','and','or','but','in','on','at','to','for','of','with','is','are','was','were','we','our','us','that','this','it','be','by','as','what','how','which','from','have','has','would','could','should','will','can','do','not','if','its','their','they','we','so','all','more','been','also','any','when','than','first','most','need','each','your','about','into','one']);
+  const freq = {};
+  TEAMS.forEach(t => {
+    const ans = data[t.id]?.answers?.[qid] || '';
+    ans.toLowerCase().replace(/[^a-z\s]/g,'').split(/\s+/).forEach(w => {
+      if (w.length > 3 && !stop.has(w)) freq[w] = (freq[w]||0) + 1;
+    });
+  });
+  const sorted = Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,18);
+  if (!sorted.length) return '';
+  const max = sorted[0][1];
+  const colors = ['rgba(59,130,246','rgba(99,102,241','rgba(16,185,129','rgba(245,158,11','rgba(244,63,94','rgba(6,182,212'];
+  const words = sorted.map(([w,n],i) => {
+    const size = 10 + Math.round((n/max)*10);
+    const c = colors[i%colors.length];
+    return `<span class="wc-word" style="font-size:${size}px;color:${c},0.9);background:${c},0.08);border-color:${c},0.25)">${w}</span>`;
+  }).join('');
+  return `<div style="padding:10px 16px 14px;border-top:1px solid var(--border)">
+    <div class="wc-title">Key themes</div>
+    <div class="wc-cloud">${words}</div>
+  </div>`;
+}
+
+// ── AI SYNTHESIS ───────────────────────────────────────────────────────────
+window.generateAI = async function() {
+  const data = allAnswersData;
+  if (!Object.keys(data).length) { alert('No answers yet to synthesize.'); return; }
+  const sec = document.getElementById('ai-section');
+  sec.innerHTML = `<div class="ai-box"><div class="ai-header"><span class="ai-badge">AI · Claude</span><span class="ai-title">Synthesizing answers…</span></div><div class="ai-loading"><div class="ai-spinner"></div>Analyzing ${Object.keys(data).length} team responses…</div></div>`;
+
+  const prompt = QUESTIONS.map((q,i) => {
+    const answers = TEAMS.map(t => data[t.id]?.answers?.[q.id]).filter(Boolean);
+    return `Question ${i+1}: "${q.text}"\nAnswers:\n${answers.map((a,j)=>`- Team ${j+1}: ${a}`).join('\n')}`;
+  }).join('\n\n');
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: `You are a skilled facilitator synthesizing World Café responses from a technical seminar. Analyze the following team answers and provide:\n1. Key themes and patterns across teams\n2. Points of agreement\n3. Notable differences or tensions\n4. Top 3 actionable recommendations\n\nBe concise, insightful, and professional. Use bullet points.\n\n${prompt}`
+        }]
+      })
+    });
+    const json = await res.json();
+    const text = json.content?.[0]?.text || 'No response generated.';
+    sec.innerHTML = `<div class="ai-box"><div class="ai-header"><span class="ai-badge">AI · Claude</span><span class="ai-title">Synthesis — Round ${currentRound}</span></div><div class="ai-content">${text}</div></div>`;
+  } catch(e) {
+    sec.innerHTML = `<div class="ai-box"><div class="ai-content" style="color:var(--red)">Error: ${e.message}</div></div>`;
+  }
+};
+
+// ── PRESENTER MODE ─────────────────────────────────────────────────────────
+window.openPresenter = function() {
+  presIdx = 0;
+  document.getElementById('presenter').classList.remove('hidden');
+  buildPresDots();
+  renderPresSlide();
+};
+window.closePresenter = () => document.getElementById('presenter').classList.add('hidden');
+
+function buildPresDots() {
+  document.getElementById('pres-dots').innerHTML = QUESTIONS.map((_,i) =>
+    `<div class="pres-dot ${i===0?'active':''}" id="pdot-${i}"></div>`
+  ).join('');
+}
+
+window.presNav = function(dir) {
+  presIdx = Math.max(0, Math.min(QUESTIONS.length-1, presIdx+dir));
+  document.querySelectorAll('.pres-dot').forEach((d,i) => {
+    d.className = 'pres-dot' + (i===presIdx?' active':i<presIdx?' done':'');
+  });
+  renderPresSlide();
+};
+
+function renderPresSlide() {
+  const q = QUESTIONS[presIdx];
+  const data = allAnswersData;
+  document.getElementById('pres-qnum').textContent = `QUESTION ${presIdx+1} OF ${QUESTIONS.length} · ROUND ${currentRound}`;
+  document.getElementById('pres-q').textContent = q.text;
+  document.getElementById('pres-count').textContent = `${Object.keys(data).length} / ${TEAMS.length} teams responded`;
+  document.getElementById('pres-prev').disabled = presIdx===0;
+  document.getElementById('pres-next').textContent = presIdx===QUESTIONS.length-1 ? '✓ Done' : 'Next →';
+  if (presIdx===QUESTIONS.length-1) document.getElementById('pres-next').onclick = closePresenter;
+  else document.getElementById('pres-next').onclick = () => presNav(1);
+
+  const cards = TEAMS.map(t => {
+    const ans = data[t.id]?.answers?.[q.id];
+    if (!ans) return '';
+    return `<div class="pres-card" style="background:${t.bg};border-left-color:${t.dot}">
+      <div class="pres-atag" style="color:${t.text}"><span class="atag-dot" style="background:${t.dot};box-shadow:0 0 6px ${t.dot}"></span>${t.label}</div>
+      <div class="pres-atext">${ans}</div>
+    </div>`;
+  }).join('') || '<div style="color:var(--text3);font-size:14px;padding:20px">No answers submitted yet.</div>';
+  document.getElementById('pres-answers').innerHTML = cards;
+}
+
+// ── TIMER ──────────────────────────────────────────────────────────────────
+window.setTimer = function(mins) { timerTotal = mins*60; timerLeft = timerTotal; renderTimer(); if(timerRunning) clearInterval(timerInterval); timerRunning=false; document.getElementById('timer-toggle').textContent='▶ Start'; };
+window.resetTimer = function() { timerLeft=timerTotal; renderTimer(); };
+window.toggleTimer = function() {
+  timerRunning = !timerRunning;
+  document.getElementById('timer-toggle').textContent = timerRunning ? '⏸ Pause' : '▶ Start';
+  if (timerRunning) { timerInterval = setInterval(() => { if(timerLeft>0){timerLeft--;renderTimer();}else{clearInterval(timerInterval);timerRunning=false;document.getElementById('timer-toggle').textContent='▶ Start';} }, 1000); }
+  else clearInterval(timerInterval);
+};
+
+function renderTimer() {
+  const m = Math.floor(timerLeft/60), s = timerLeft%60;
+  const disp = document.getElementById('timer-display');
+  const fill = document.getElementById('timer-fill');
+  const pct = timerTotal>0 ? (timerLeft/timerTotal)*100 : 0;
+  disp.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  disp.className = 'timer-display' + (pct<20?' urgent':pct<40?' warn':'');
+  fill.style.width = pct+'%';
+  fill.className = 'timer-fill' + (pct<20?' urgent':pct<40?' warn':'');
+}
+
+// ── FACILITATOR ────────────────────────────────────────────────────────────
+window.openFac = () => { document.getElementById('fac-overlay').classList.remove('hidden'); document.getElementById('fac-status').textContent=''; };
+window.closeFac = () => document.getElementById('fac-overlay').classList.add('hidden');
+window.authFac = function() {
+  const pw = document.getElementById('fac-pw').value;
+  if (pw === FAC_PASSWORD) {
+    facAuthed = true;
+    document.getElementById('fac-auth').style.display = 'none';
+    document.getElementById('fac-panel').style.display = 'block';
+    document.getElementById('fac-status').textContent = '✓ Authenticated';
+  } else {
+    document.getElementById('fac-status').textContent = '⚠ Incorrect password';
+    document.getElementById('fac-status').style.color = 'var(--red)';
+  }
+};
+window.facSetRound = async function(r) {
+  await set(metaRef, { round: r });
+  currentRound = r; QUESTIONS = ALL_ROUNDS[r]||ALL_ROUNDS[1];
+  document.getElementById('header-round').textContent = `ROUND ${r}`;
+  document.getElementById('round-label-team').textContent = `Round ${r}`;
+  onValue(ref(db, `worldcafe/round${r}/answers`), snap => { allAnswersData = snap.val()||{}; renderMain(); });
+  closeFac();
+};
+window.facClear = async function() {
+  if (!confirm('Clear all answers for this round?')) return;
+  await remove(ref(db, `worldcafe/round${currentRound}/answers`));
+  closeFac();
+};
+
+// ── EXPORT ─────────────────────────────────────────────────────────────────
+window.exportExcel = window.facExportExcel = function() {
+  const wb = XLSX.utils.book_new();
+  for (let r = 1; r <= 3; r++) {
+    const qs = ALL_ROUNDS[r] || [];
+    const rows = [['Team', ...qs.map((_,i) => `Q${i+1}`)]];
+    get(ref(db, `worldcafe/round${r}/answers`)).then(snap => {
+      const d = snap.val() || {};
+      TEAMS.forEach(t => {
+        if (d[t.id]) rows.push([t.label, ...qs.map(q => d[t.id]?.answers?.[q.id]||'')]);
+      });
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, `Round ${r}`);
+      if (r===3) XLSX.writeFile(wb, 'worldcafe-responses.xlsx');
+    });
+  }
+};
+
+// ── QR CODE ────────────────────────────────────────────────────────────────
+let qrBuilt = false;
+function buildQR() {
+  if (qrBuilt) return;
+  qrBuilt = true;
+  const url = window.location.href.split('#')[0];
+  document.getElementById('qr-url-text').textContent = url;
+  new QRCode(document.getElementById('qr-canvas'), { text: url, width: 180, height: 180, colorDark:'#0a0e1a', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.H });
+}
+
+// Init timer display
+renderTimer();
+</script>
+</body>
+</html>
